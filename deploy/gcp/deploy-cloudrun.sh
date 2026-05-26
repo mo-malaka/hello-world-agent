@@ -58,6 +58,13 @@ build_and_push() {
 
 deploy_cloud_run() {
   log "Deploying Cloud Run service ${SERVICE_NAME}"
+  local env_vars="CLOUD_PROVIDER=gcp,SERVICE_NAME=${SERVICE_NAME},VERSION=${IMAGE_TAG}"
+  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    env_vars+=",ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
+  fi
+  if [[ -n "${ANTHROPIC_MODEL:-}" ]]; then
+    env_vars+=",ANTHROPIC_MODEL=${ANTHROPIC_MODEL}"
+  fi
   gcloud run deploy "${SERVICE_NAME}" \
     --image "${IMAGE}" \
     --platform managed \
@@ -65,7 +72,7 @@ deploy_cloud_run() {
     --project "${GCP_PROJECT_ID}" \
     --port 8080 \
     --allow-unauthenticated \
-    --set-env-vars "CLOUD_PROVIDER=gcp,SERVICE_NAME=${SERVICE_NAME},VERSION=${IMAGE_TAG}" \
+    --set-env-vars "${env_vars}" \
     --quiet
 
   gcloud run services describe "${SERVICE_NAME}" \
@@ -84,6 +91,16 @@ smoke_test() {
   echo
   curl -fsS "${url}/agent"
   echo
+
+  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    log "Smoke testing /agent/invoke"
+    curl -fsS -X POST "${url}/agent/invoke" \
+      -H "Content-Type: application/json" \
+      -d '{"input":"Return your service metadata","max_steps":3}' >/dev/null
+    echo
+  else
+    log "Skipping /agent/invoke (set ANTHROPIC_API_KEY to enable)"
+  fi
 }
 
 main() {

@@ -76,6 +76,13 @@ ensure_access_role() {
 
 source_config() {
   local access_role_arn="$1"
+  local anthropic_env_json=""
+  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    anthropic_env_json="${anthropic_env_json}, \"ANTHROPIC_API_KEY\": \"${ANTHROPIC_API_KEY//\"/\\\"}\""
+  fi
+  if [[ -n "${ANTHROPIC_MODEL:-}" ]]; then
+    anthropic_env_json="${anthropic_env_json}, \"ANTHROPIC_MODEL\": \"${ANTHROPIC_MODEL//\"/\\\"}\""
+  fi
   cat <<EOF
 {
   "AuthenticationConfiguration": {
@@ -90,7 +97,7 @@ source_config() {
       "RuntimeEnvironmentVariables": {
         "CLOUD_PROVIDER": "aws",
         "SERVICE_NAME": "${SERVICE_NAME}",
-        "VERSION": "${IMAGE_TAG}"
+        "VERSION": "${IMAGE_TAG}"${anthropic_env_json}
       }
     }
   }
@@ -157,6 +164,16 @@ smoke_test() {
   echo
   curl -fsS "${url}/agent"
   echo
+
+  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    log "Smoke testing /agent/invoke"
+    curl -fsS -X POST "${url}/agent/invoke" \
+      -H "Content-Type: application/json" \
+      -d '{"input":"Return your service metadata","max_steps":3}' >/dev/null
+    echo
+  else
+    log "Skipping /agent/invoke (set ANTHROPIC_API_KEY to enable)"
+  fi
 }
 
 main() {

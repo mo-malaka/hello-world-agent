@@ -100,13 +100,21 @@ deploy_container_app() {
     --resource-group "${AZURE_RESOURCE_GROUP}" \
     --query name -o tsv 2>/dev/null || true)"
 
+  local env_vars_args=("CLOUD_PROVIDER=azure" "SERVICE_NAME=${SERVICE_NAME}" "VERSION=${IMAGE_TAG}")
+  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    env_vars_args+=("ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}")
+  fi
+  if [[ -n "${ANTHROPIC_MODEL:-}" ]]; then
+    env_vars_args+=("ANTHROPIC_MODEL=${ANTHROPIC_MODEL}")
+  fi
+
   if [[ -n "${exists}" ]]; then
     log "Updating Container App ${SERVICE_NAME}"
     az containerapp update \
       --name "${SERVICE_NAME}" \
       --resource-group "${AZURE_RESOURCE_GROUP}" \
       --image "${image}" \
-      --set-env-vars "CLOUD_PROVIDER=azure" "SERVICE_NAME=${SERVICE_NAME}" "VERSION=${IMAGE_TAG}" \
+      --set-env-vars "${env_vars_args[@]}" \
       >/dev/null
   else
     log "Creating Container App ${SERVICE_NAME}"
@@ -120,7 +128,7 @@ deploy_container_app() {
       --registry-server "${AZURE_ACR_NAME}.azurecr.io" \
       --registry-username "$(az acr credential show --name "${AZURE_ACR_NAME}" --query username -o tsv)" \
       --registry-password "$(az acr credential show --name "${AZURE_ACR_NAME}" --query passwords[0].value -o tsv)" \
-      --env-vars "CLOUD_PROVIDER=azure" "SERVICE_NAME=${SERVICE_NAME}" "VERSION=${IMAGE_TAG}" \
+      --env-vars "${env_vars_args[@]}" \
       >/dev/null
   fi
 
@@ -140,6 +148,16 @@ smoke_test() {
   echo
   curl -fsS "${url}/agent"
   echo
+
+  if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+    log "Smoke testing /agent/invoke"
+    curl -fsS -X POST "${url}/agent/invoke" \
+      -H "Content-Type: application/json" \
+      -d '{"input":"Return your service metadata","max_steps":3}' >/dev/null
+    echo
+  else
+    log "Skipping /agent/invoke (set ANTHROPIC_API_KEY to enable)"
+  fi
 }
 
 main() {

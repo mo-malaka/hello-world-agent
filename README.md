@@ -15,6 +15,7 @@ A minimal HTTP service for testing the same Docker image on three serverless con
 | GET | `/health` | `{"status":"ok"}` — platform health checks |
 | GET | `/` | `Hello, World!` |
 | GET | `/agent` | Service metadata (name, version, `cloud_provider`) |
+| POST | `/agent/invoke` | Invoke Claude tool-calling agent (sync) |
 | GET | `/docs` | OpenAPI UI (FastAPI) |
 
 Environment variables (set by deploy scripts or locally):
@@ -23,6 +24,8 @@ Environment variables (set by deploy scripts or locally):
 - `SERVICE_NAME` — default `hello-world-agent`
 - `VERSION` — default `0.1.0`
 - `CLOUD_PROVIDER` — `aws`, `gcp`, `azure`, or `local`
+- `ANTHROPIC_API_KEY` — required to use `POST /agent/invoke`
+- `ANTHROPIC_MODEL` — Claude model name (default: `claude-3-5-sonnet-latest`)
 
 ## Prerequisites
 
@@ -45,7 +48,7 @@ Billing must be enabled on each account. Pick a region close to you and set the 
 cd hello-world-agent
 
 # Run without Docker
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 export CLOUD_PROVIDER=local
 uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
@@ -63,6 +66,11 @@ Verify:
 curl -s http://localhost:8080/health
 curl -s http://localhost:8080/
 curl -s http://localhost:8080/agent | jq .
+export ANTHROPIC_API_KEY="..."
+export ANTHROPIC_MODEL="claude-3-5-sonnet-latest"
+curl -s -X POST http://localhost:8080/agent/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Return your service metadata","max_steps":3}' | jq .
 ```
 
 ## Deploy
@@ -82,7 +90,7 @@ The script will:
 2. Build and push the image
 3. Create `AppRunnerECRAccessRole` for ECR pull (one-time, unless `APPRUNNER_ACCESS_ROLE_ARN` is set)
 4. Create or update the App Runner service with health check `GET /health`
-5. Smoke-test `/health`, `/`, and `/agent`
+5. Smoke-test `/health`, `/`, and `/agent` (and `/agent/invoke` if `ANTHROPIC_API_KEY` is set)
 
 **Cost note:** App Runner keeps at least one instance warm; expect ongoing cost while the service exists.
 
@@ -116,6 +124,9 @@ export URL=https://your-service-url
 curl -s "$URL/health"
 curl -s "$URL/"
 curl -s "$URL/agent" | jq .
+curl -s -X POST "$URL/agent/invoke" \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Return your service metadata","max_steps":3}' | jq .
 ```
 
 Confirm `cloud_provider` in `/agent` matches the cloud you deployed to.
